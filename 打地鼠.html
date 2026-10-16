@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>科学总复习大挑战</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        
+        body {
+            font-family: 'ZCOOL KuaiLe', cursive, sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            touch-action: manipulation;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .bg-quiz { background: linear-gradient(180deg, #a1c4fd 0%, #c2e9fb 100%); }
+        .bg-mole { background: linear-gradient(180deg, #ff9a9e 0%, #fecfef 100%); }
+
+        /* Mole Game Styles */
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            padding: 1rem;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+
+        .hole-container {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            margin: 0 auto;
+        }
+
+        .dirt {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 35px;
+            background: #6d4c41; /* brown */
+            border-radius: 50%;
+            z-index: 10;
+            box-shadow: inset 0 8px 10px rgba(0,0,0,0.3);
+        }
+
+        .mole {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3.5rem;
+            transition: bottom 0.1s ease-out;
+            z-index: 5;
+            cursor: pointer;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        .mole.up {
+            bottom: 30px;
+            pointer-events: auto;
+            opacity: 1;
+        }
+
+        .mole.whacked {
+            animation: bonk 0.2s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes bonk {
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.2) rotate(15deg); filter: brightness(1.5); }
+            100% { transform: translateX(-50%) scale(0.5); opacity: 0; }
+        }
+
+        .hit-text {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #fbbf24;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 20;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        .hit-text.show-hit {
+            animation: floatUp 0.6s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translate(-50%, 0) scale(0.5); opacity: 1; }
+            50% { transform: translate(-50%, -30px) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50px) scale(1); opacity: 0; }
+        }
+
+        /* Quiz Styles */
+        .option-btn {
+            transition: all 0.2s;
+        }
+        .option-btn:active { transform: scale(0.95); }
+        .shake { animation: shake 0.4s ease-in-out; }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        
+        .bounce-in { animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative w-full h-full bg-quiz" id="main-body">
+
+    <!-- Top HUD (Always visible during gameplay) -->
+    <div id="hud" class="hidden w-full max-w-lg mx-auto flex justify-between items-center p-4 z-20">
+        <div class="bg-white/90 backdrop-blur-sm px-6 py-2 rounded-full shadow-lg border-4 border-yellow-300">
+            <span class="text-xl font-bold text-gray-700">总分: <span id="total-score" class="text-3xl text-orange-500">0</span></span>
+        </div>
+        <div id="progress-container" class="bg-white/90 backdrop-blur-sm px-6 py-2 rounded-full shadow-lg border-4 border-blue-300">
+            <span class="text-xl font-bold text-gray-700">第 <span id="question-number" class="text-2xl text-blue-500">1</span> 关</span>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-md p-4">
+        <div class="text-8xl mb-4 animate-bounce">🐹</div>
+        <h1 class="text-5xl md:text-6xl font-bold text-blue-600 mb-6 text-center text-shadow-md">科学总复习大挑战</h1>
+        <p class="text-2xl text-gray-700 mb-8 text-center font-bold">
+            答对问题，就能解锁 <span class="text-orange-500">10秒疯狂打地鼠</span> 奖励！<br>看看你能拿多少分？
+        </p>
+        <button onclick="startGame()" class="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-3xl py-4 px-12 rounded-full shadow-xl transform transition hover:scale-105 active:scale-95 border-b-4 border-blue-700">
+            开始挑战 🚀
+        </button>
+    </div>
+
+    <!-- Quiz Screen -->
+    <div id="quiz-screen" class="hidden flex-1 flex flex-col items-center justify-center p-4 w-full max-w-lg mx-auto relative z-10">
+        <div class="bg-white rounded-3xl shadow-2xl p-6 w-full text-center border-4 border-blue-200 bounce-in">
+            <div id="unit-badge" class="inline-block bg-blue-100 text-blue-600 px-4 py-1 rounded-full text-sm font-bold mb-4">
+                单元 1: 科学技能
+            </div>
+            <h2 id="question-text" class="text-3xl text-gray-800 mb-8 font-bold leading-relaxed">
+                题目加载中...
+            </h2>
+            <div id="options-container" class="grid grid-cols-1 gap-4">
+                <!-- Options injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Mole Game Screen (Reward Phase) -->
+    <div id="mole-screen" class="hidden flex-1 flex flex-col items-center justify-center p-4 w-full max-w-lg mx-auto relative z-10">
+        <h2 class="text-4xl font-bold text-white mb-2 drop-shadow-md animate-pulse text-center">
+            🎉 奖励时间！疯狂打地鼠！
+        </h2>
+        <p class="text-2xl text-white mb-6 font-bold bg-black/30 px-6 py-2 rounded-full">
+            倒计时: <span id="mole-timer" class="text-3xl text-yellow-300">10</span> 秒
+        </p>
+        
+        <div class="bg-white/40 p-6 rounded-[3rem] shadow-2xl border-4 border-white/50 backdrop-blur-sm">
+            <div class="game-board" id="board">
+                <!-- Holes injected via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- End Screen -->
+    <div id="end-screen" class="hidden absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-4">
+        <div class="bg-white p-8 rounded-[3rem] shadow-2xl text-center w-full max-w-sm border-8 border-yellow-300 bounce-in">
+            <div class="text-7xl mb-4">🏆</div>
+            <h2 class="text-4xl font-bold text-orange-500 mb-2">复习完成！</h2>
+            <p class="text-2xl text-gray-600 mb-6">太棒了，你总共获得了</p>
+            <div class="text-6xl text-yellow-500 font-bold mb-6"><span id="final-score">0</span> 分</div>
+            <p class="text-lg text-gray-500 mb-6">科学知识掌握得真好！</p>
+            <button onclick="resetGame()" class="w-full bg-orange-500 text-white text-2xl py-4 rounded-full shadow-lg transform transition active:scale-95 border-b-4 border-orange-700">
+                再玩一次 🚀
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Database of Questions (Covering all 9 Units)
+        const quizData = [
+            { unit: "单元1: 科学技能", q: "要量一本书有多长，我们应该用什么工具？", options: [{t: "尺 (测量)", e: "📏", isCorrect: true}, {t: "放大镜", e: "🔍", isCorrect: false}] },
+            { unit: "单元2: 科学室规则", q: "在科学室里，如果觉得肚子饿了，可以吃东西吗？", options: [{t: "不可以", e: "❌", isCorrect: true}, {t: "可以", e: "🍔", isCorrect: false}] },
+            { unit: "单元3: 生物与非生物", q: "下面哪一个是有生命的“生物”？", options: [{t: "小猫", e: "🐱", isCorrect: true}, {t: "石头", e: "🪨", isCorrect: false}] },
+            { unit: "单元4: 人类", q: "我们用身体的哪个部分来“闻”花香？", options: [{t: "鼻子", e: "👃", isCorrect: true}, {t: "耳朵", e: "👂", isCorrect: false}] },
+            { unit: "单元5: 动物", q: "牛最喜欢吃什么食物？（草食动物）", options: [{t: "草", e: "🌿", isCorrect: true}, {t: "肉", e: "🥩", isCorrect: false}] },
+            { unit: "单元6: 植物", q: "植物的哪个部分负责在泥土里“喝水”？", options: [{t: "根", e: "🪢", isCorrect: true}, {t: "叶子", e: "🍃", isCorrect: false}] },
+            { unit: "单元7: 磁铁", q: "磁铁可以吸住下面哪种东西？", options: [{t: "铁钉", e: "🔩", isCorrect: true}, {t: "橡皮擦", e: "✏️", isCorrect: false}] },
+            { unit: "单元8: 吸水性", q: "桌子上洒了水，用什么能最快把水吸干？", options: [{t: "海绵", e: "🧽", isCorrect: true}, {t: "塑料袋", e: "🛍️", isCorrect: false}] },
+            { unit: "单元9: 地球", q: "我们人类呼吸，必须要有什么？", options: [{t: "空气", e: "💨", isCorrect: true}, {t: "泥土", e: "🌱", isCorrect: false}] }
+        ];
+
+        let currentQuestionIndex = 0;
+        let totalScore = 0;
+        let isMolePlaying = false;
+        
+        // Mole Game Variables
+        let timeLeft = 10;
+        let moleInterval;
+        let countdownInterval;
+        let holes = [];
+
+        // DOM Elements
+        const elBody = document.getElementById('main-body');
+        const elStartScreen = document.getElementById('start-screen');
+        const elQuizScreen = document.getElementById('quiz-screen');
+        const elMoleScreen = document.getElementById('mole-screen');
+        const elEndScreen = document.getElementById('end-screen');
+        const elHud = document.getElementById('hud');
+        
+        const elTotalScore = document.getElementById('total-score');
+        const elQNumber = document.getElementById('question-number');
+        const elQuestionText = document.getElementById('question-text');
+        const elOptionsContainer = document.getElementById('options-container');
+        const elUnitBadge = document.getElementById('unit-badge');
+        
+        const elMoleTimer = document.getElementById('mole-timer');
+        const elBoard = document.getElementById('board');
+        const elFinalScore = document.getElementById('final-score');
+
+        function startGame() {
+            // Shuffle questions so it's different every time
+            quizData.sort(() => Math.random() - 0.5);
+            
+            currentQuestionIndex = 0;
+            totalScore = 0;
+            elTotalScore.innerText = totalScore;
+            
+            elStartScreen.classList.add('hidden');
+            elHud.classList.remove('hidden');
+            
+            initMoleBoard();
+            showQuestion();
+        }
+
+        function showQuestion() {
+            elBody.className = "min-h-screen flex flex-col relative w-full h-full bg-quiz";
+            elMoleScreen.classList.add('hidden');
+            elQuizScreen.classList.remove('hidden');
+            
+            if (currentQuestionIndex >= quizData.length) {
+                endGame();
+                return;
+            }
+
+            const qData = quizData[currentQuestionIndex];
+            elQNumber.innerText = currentQuestionIndex + 1;
+            elUnitBadge.innerText = qData.unit;
+            elQuestionText.innerText = qData.q;
+            
+            elOptionsContainer.innerHTML = '';
+            
+            // Shuffle options
+            const options = [...qData.options].sort(() => Math.random() - 0.5);
+            
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "option-btn flex items-center p-4 bg-gray-50 border-4 border-gray-200 rounded-2xl hover:border-blue-400 w-full text-left";
+                btn.onclick = () => handleAnswer(opt.isCorrect, btn);
+                btn.innerHTML = `
+                    <span class="text-6xl mr-4">${opt.e}</span>
+                    <span class="text-2xl font-bold text-gray-700">${opt.t}</span>
+                `;
+                elOptionsContainer.appendChild(btn);
+            });
+            
+            // Re-trigger bounce animation
+            elQuizScreen.firstElementChild.classList.remove('bounce-in');
+            void elQuizScreen.offsetWidth; // Reflow
+            elQuizScreen.firstElementChild.classList.add('bounce-in');
+        }
+
+        function handleAnswer(isCorrect, btnElement) {
+            if (isCorrect) {
+                // Correct Answer! Give them the Mole Game!
+                btnElement.classList.remove('border-gray-200', 'bg-gray-50');
+                btnElement.classList.add('border-green-500', 'bg-green-100');
+                
+                // Add tiny bonus for getting it right
+                totalScore += 5;
+                elTotalScore.innerText = totalScore;
+
+                setTimeout(() => {
+                    startMoleGame();
+                }, 800);
+            } else {
+                // Wrong Answer
+                btnElement.classList.remove('border-gray-200');
+                btnElement.classList.add('border-red-500', 'shake', 'bg-red-50');
+                
+                setTimeout(() => {
+                    btnElement.classList.remove('shake', 'border-red-500', 'bg-red-50');
+                    btnElement.classList.add('border-gray-200');
+                }, 500);
+            }
+        }
+
+        function initMoleBoard() {
+            elBoard.innerHTML = '';
+            holes = [];
+            for (let i = 0; i < 9; i++) {
+                const holeDiv = document.createElement('div');
+                holeDiv.className = 'hole-container';
+                
+                const dirt = document.createElement('div');
+                dirt.className = 'dirt';
+                
+                const mole = document.createElement('div');
+                mole.className = 'mole';
+                mole.innerText = '🐹'; // Use hamster/mole
+                
+                const hitText = document.createElement('div');
+                hitText.className = 'hit-text';
+                hitText.innerText = '+2';
+
+                mole.addEventListener('touchstart', (e) => { e.preventDefault(); whack(i); });
+                mole.addEventListener('mousedown', () => whack(i));
+
+                holeDiv.appendChild(mole);
+                holeDiv.appendChild(dirt);
+                holeDiv.appendChild(hitText);
+                elBoard.appendChild(holeDiv);
+
+                holes.push({
+                    moleEl: mole,
+                    textEl: hitText,
+                    isUp: false,
+                    timeoutId: null
+                });
+            }
+        }
+
+        function startMoleGame() {
+            elQuizScreen.classList.add('hidden');
+            elMoleScreen.classList.remove('hidden');
+            elBody.className = "min-h-screen flex flex-col relative w-full h-full bg-mole";
+            
+            timeLeft = 10; // 10 seconds crazy reward time
+            elMoleTimer.innerText = timeLeft;
+            isMolePlaying = true;
+            
+            countdownInterval = setInterval(() => {
+                timeLeft--;
+                elMoleTimer.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    stopMoleGame();
+                }
+            }, 1000);
+
+            // Pop first moles quickly
+            setTimeout(popRandomMole, 200);
+            setTimeout(popRandomMole, 600);
+            setTimeout(popRandomMole, 1000);
+        }
+
+        function popRandomMole() {
+            if (!isMolePlaying) return;
+
+            const emptyHoles = holes.filter(h => !h.isUp);
+            if (emptyHoles.length === 0) return; 
+
+            const hole = emptyHoles[Math.floor(Math.random() * emptyHoles.length)];
+            
+            hole.moleEl.classList.remove('whacked');
+            hole.moleEl.classList.add('up');
+            hole.isUp = true;
+
+            // Very fast for 10s mode
+            const duration = 500 + Math.random() * 600; 
+
+            hole.timeoutId = setTimeout(() => {
+                if (hole.isUp) hideMole(hole);
+            }, duration);
+
+            const nextPopDelay = 300 + Math.random() * 400;
+            moleInterval = setTimeout(popRandomMole, nextPopDelay);
+        }
+
+        function hideMole(hole) {
+            hole.moleEl.classList.remove('up');
+            hole.isUp = false;
+        }
+
+        function whack(index) {
+            if (!isMolePlaying) return;
+            const hole = holes[index];
+            if (!hole.isUp) return; 
+
+            clearTimeout(hole.timeoutId);
+            
+            // Earn points
+            totalScore += 2;
+            elTotalScore.innerText = totalScore;
+            
+            // Animation
+            hole.moleEl.classList.add('whacked');
+            
+            hole.textEl.innerText = '+2';
+            hole.textEl.classList.remove('show-hit');
+            void hole.textEl.offsetWidth; 
+            hole.textEl.classList.add('show-hit');
+            
+            hole.isUp = false;
+            
+            setTimeout(() => {
+                hole.moleEl.classList.remove('up');
+                hole.moleEl.classList.remove('whacked');
+            }, 200);
+        }
+
+        function stopMoleGame() {
+            isMolePlaying = false;
+            clearInterval(countdownInterval);
+            clearTimeout(moleInterval);
+            
+            holes.forEach(hole => {
+                clearTimeout(hole.timeoutId);
+                hole.moleEl.classList.remove('up');
+                hole.isUp = false;
+            });
+
+            // Move to next question
+            currentQuestionIndex++;
+            showQuestion();
+        }
+
+        function endGame() {
+            elHud.classList.add('hidden');
+            elQuizScreen.classList.add('hidden');
+            elFinalScore.innerText = totalScore;
+            elEndScreen.classList.remove('hidden');
+        }
+
+        function resetGame() {
+            elEndScreen.classList.add('hidden');
+            elStartScreen.classList.remove('hidden');
+            elBody.className = "min-h-screen flex flex-col relative w-full h-full bg-quiz";
+        }
+    </script>
+</body>
+</html>
